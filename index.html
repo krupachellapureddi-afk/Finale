@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Hospital Dashboard — Interactive (Single File)</title>
+  <style>
+    :root{
+      --bg:#f4f7fb; --card:#ffffff; --muted:#6b7280; --accent:#0ea5a4; --danger:#ef4444;
+      --glass: rgba(15,23,42,0.04);
+      --shadow: 0 6px 20px rgba(12,18,40,0.08);
+      --radius:12px;
+      --max-width:1200px;
+      font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0}
+    body{background:linear-gradient(180deg,var(--bg),#fff);display:flex;align-items:flex-start;justify-content:center;padding:28px;color:#0f172a}
+
+    .wrap{width:100%;max-width:var(--max-width)}
+
+    header{display:flex;align-items:center;gap:14px;margin-bottom:18px}
+    header .brand{display:flex;flex-direction:column}
+    header h1{margin:0;font-size:20px}
+    header p{margin:0;color:var(--muted);font-size:13px}
+
+    .grid{display:grid;gap:16px}
+    .top-grid{grid-template-columns:repeat(3,1fr)}
+    .main-grid{grid-template-columns: 1fr 420px}
+
+    .card{background:var(--card);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);border:1px solid var(--glass)}
+
+    /* KPI */
+    .kpi{display:flex;align-items:center;justify-content:space-between;gap:12px}
+    .kpi .num{font-size:20px;font-weight:700}
+    .kpi .label{color:var(--muted);font-size:13px}
+
+    /* Table */
+    .table{width:100%;border-collapse:collapse;font-size:14px}
+    .table th, .table td{padding:10px 8px;text-align:left;border-bottom:1px solid #f1f3f5}
+    .table th{font-weight:600;color:#0f172a}
+    .table tbody tr:hover{background:#fbfdff}
+    .pill{display:inline-block;padding:6px 10px;border-radius:999px;font-size:12px}
+    .pill.green{background:#ecfdf5;color:#064e3b}
+    .pill.yellow{background:#fff7ed;color:#92400e}
+    .pill.red{background:#fff1f2;color:#9f1239}
+
+    /* Controls */
+    .controls{display:flex;gap:8px;align-items:center}
+    .search{padding:8px 12px;border-radius:10px;border:1px solid #e6edf3;width:240px}
+    .btn{background:var(--accent);color:white;padding:8px 12px;border-radius:10px;border:0;cursor:pointer}
+    .btn.ghost{background:transparent;color:var(--accent);border:1px dashed rgba(14,165,164,0.18)}
+
+    /* chart area */
+    .chart{height:200px}
+
+    /* appointments list */
+    .appt-list{display:flex;flex-direction:column;gap:10px}
+    .appt{display:flex;gap:10px;align-items:center}
+    .avatar{width:44px;height:44px;border-radius:8px;background:linear-gradient(135deg,#60a5fa,#7c3aed);display:flex;align-items:center;justify-content:center;color:white;font-weight:700}
+
+    /* modal */
+    .overlay{position:fixed;inset:0;background:rgba(2,6,23,0.45);display:none;align-items:center;justify-content:center}
+    .modal{width:420px;background:var(--card);padding:18px;border-radius:12px}
+    .field{display:flex;flex-direction:column;margin-bottom:10px}
+    .field input, .field select, .field textarea{padding:8px 10px;border-radius:8px;border:1px solid #e6edf3}
+
+    /* responsive */
+    @media (max-width:1000px){
+      .top-grid{grid-template-columns:1fr}
+      .main-grid{grid-template-columns:1fr}
+      body{padding:14px}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div style="width:52px;height:52px;border-radius:12px;background:linear-gradient(135deg,#06b6d4,#0ea5a4);display:flex;align-items:center;justify-content:center;color:white;font-weight:700">H</div>
+      <div class="brand">
+        <h1>Sunrise Hospital — Admin Dashboard</h1>
+        <p>Real-time overview — Patients · Beds · Appointments</p>
+      </div>
+    </header>
+
+    <div class="grid top-grid">
+      <div class="card kpi">
+        <div>
+          <div class="label">Current Patients</div>
+          <div class="num" id="kPatients">172</div>
+        </div>
+        <div style="text-align:right">
+          <div class="label">Occupancy</div>
+          <div class="num" id="kOccupancy">78%</div>
+        </div>
+      </div>
+
+      <div class="card kpi">
+        <div>
+          <div class="label">Today's Appointments</div>
+          <div class="num" id="kAppointments">64</div>
+        </div>
+        <div style="text-align:right">
+          <div class="label">Avg Wait</div>
+          <div class="num" id="kWait">18m</div>
+        </div>
+      </div>
+
+      <div class="card kpi">
+        <div>
+          <div class="label">Admitted Today</div>
+          <div class="num" id="kAdmit">28</div>
+        </div>
+        <div style="text-align:right">
+          <div class="label">Discharges</div>
+          <div class="num" id="kDischarge">12</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid main-grid" style="margin-top:16px">
+      <!-- left: Patients table + charts -->
+      <div>
+        <div class="card" style="margin-bottom:12px;display:flex;align-items:center;justify-content:space-between">
+          <div style="display:flex;gap:12px;align-items:center">
+            <input class="search" id="search" placeholder="Search patient name, id, or ailment...">
+            <select id="filterStatus" style="padding:8px 10px;border-radius:8px;border:1px solid #e6edf3">
+              <option value="all">All Status</option>
+              <option value="admitted">Admitted</option>
+              <option value="in-surgery">In Surgery</option>
+              <option value="discharged">Discharged</option>
+            </select>
+            <button class="btn" id="addPatientBtn">+ New Patient</button>
+          </div>
+          <div class="controls">
+            <button class="btn ghost" id="exportBtn">Export CSV</button>
+            <button class="btn" id="refreshBtn">Refresh</button>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom:12px">
+          <table class="table" id="patientsTable">
+            <thead>
+              <tr><th>Patient</th><th>Age</th><th>Bed</th><th>Admission</th><th>Status</th><th></th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <div class="grid" style="grid-template-columns:1fr 1fr;gap:12px">
+          <div class="card">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><div style="font-weight:700">Bed Occupancy</div><div class="muted">Live</div></div>
+            <canvas id="occupancyChart" class="chart" width="400" height="200"></canvas>
+          </div>
+
+          <div class="card">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><div style="font-weight:700">Admissions (Week)</div></div>
+            <canvas id="admitChart" class="chart" width="400" height="200"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- right: Appointments and quick actions -->
+      <div>
+        <div class="card" style="margin-bottom:12px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+            <div style="font-weight:700">Upcoming Appointments</div>
+            <div style="color:var(--muted);font-size:13px">Today</div>
+          </div>
+          <div class="appt-list" id="appointments"></div>
+        </div>
+
+        <div class="card" style="margin-bottom:12px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+            <div style="font-weight:700">Quick Actions</div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <button class="btn" id="bedAssignBtn">Assign Bed</button>
+            <button class="btn ghost" id="sendAlertBtn">Send Alert to Staff</button>
+            <button class="btn" id="generateReportBtn">Generate Daily Report</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div style="font-weight:700;margin-bottom:8px">Notes / Alerts</div>
+          <div id="alerts">
+            <div style="padding:10px;border-radius:8px;background:#fff7ed;margin-bottom:8px">ER: High influx of flu-like cases — consider opening overflow ward</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- modal add patient -->
+    <div class="overlay" id="overlay">
+      <div class="modal" role="dialog" aria-modal="true">
+        <h3 style="margin-top:0">Add New Patient</h3>
+        <div class="field">
+          <label>Name</label>
+          <input id="pName">
+        </div>
+        <div class="field">
+          <label>Age</label>
+          <input id="pAge" type="number">
+        </div>
+        <div class="field">
+          <label>Ailment</label>
+          <input id="pAilment">
+        </div>
+        <div class="field">
+          <label>Assign Bed</label>
+          <input id="pBed">
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button class="btn ghost" id="cancelAdd">Cancel</button>
+          <button class="btn" id="saveAdd">Save</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // --- demo data ---
+    const PATIENTS = [
+      {id:'P-1023', name:'Aarav Patel', age:45, bed:'A-12', admitted:'2025-09-08 10:25', status:'admitted', ailment:'Pneumonia'},
+      {id:'P-1024', name:'Neha Sharma', age:34, bed:'B-03', admitted:'2025-09-09 09:00', status:'in-surgery', ailment:'Appendicitis'},
+      {id:'P-1025', name:'Kabir Reddy', age:61, bed:'A-07', admitted:'2025-09-09 14:12', status:'admitted', ailment:'Fracture'},
+      {id:'P-1026', name:'Diya Iyer', age:29, bed:'C-01', admitted:'2025-09-10 08:30', status:'admitted', ailment:'Observation'},
+      {id:'P-1027', name:'Vikram Varma', age:52, bed:'-','admitted':'2025-09-10 05:40', status:'discharged', ailment:'Recovery'},
+    ];
+
+    // clone to state
+    let patients = [...PATIENTS];
+    const appointments = [
+      {time:'09:30', name:'Isha Kapoor', dept:'Cardiology'},
+      {time:'10:00', name:'Rahul Jain', dept:'Orthopedics'},
+      {time:'11:15', name:'Anita Rao', dept:'Dermatology'},
+      {time:'13:30', name:'Suresh Menon', dept:'ENT'},
+    ];
+
+    // elements
+    const tbody = document.querySelector('#patientsTable tbody');
+    const search = document.getElementById('search');
+    const filterStatus = document.getElementById('filterStatus');
+    const overlay = document.getElementById('overlay');
+    const addPatientBtn = document.getElementById('addPatientBtn');
+    const saveAdd = document.getElementById('saveAdd');
+    const cancelAdd = document.getElementById('cancelAdd');
+
+    // KPI elements
+    const kPatients = document.getElementById('kPatients');
+    const kOccupancy = document.getElementById('kOccupancy');
+    const kAppointments = document.getElementById('kAppointments');
+    const kWait = document.getElementById('kWait');
+    const kAdmit = document.getElementById('kAdmit');
+    const kDischarge = document.getElementById('kDischarge');
+
+    // charts
+    const occCanvas = document.getElementById('occupancyChart');
+    const admitCanvas = document.getElementById('admitChart');
+
+    // appointments
+    const apptList = document.getElementById('appointments');
+
+    // initial render
+    function renderPatients(){
+      const q = search.value.trim().toLowerCase();
+      const status = filterStatus.value;
+      tbody.innerHTML = '';
+      patients.filter(p => {
+        if(status!=='all' && p.status!==status) return false;
+        if(!q) return true;
+        return p.name.toLowerCase().includes(q) || p.id.toLowerCase().includes(q) || (p.ailment||'').toLowerCase().includes(q);
+      }).forEach(p => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><div style="font-weight:600">${p.name}<div style="font-size:12px;color:var(--muted)">${p.id}</div></div></td>
+          <td>${p.age||'-'}</td>
+          <td>${p.bed||'-'}</td>
+          <td>${p.admitted||'-'}</td>
+          <td>${statusPill(p.status)}</td>
+          <td style="text-align:right"><button class='btn' onclick="viewPatient('${p.id}')">View</button></td>
+        `;
+        tbody.appendChild(tr);
+      });
+      updateKPIs();
+    }
+
+    function statusPill(s){
+      if(s==='admitted') return "<span class='pill green'>Admitted</span>";
+      if(s==='in-surgery') return "<span class='pill yellow'>In Surgery</span>";
+      if(s==='discharged') return "<span class='pill red'>Discharged</span>";
+      return <span class='pill'>${s}</span>;
+    }
+
+    window.viewPatient = function(id){
+      const p = patients.find(x=>x.id===id);
+      if(!p) return alert('Not found');
+      alert(Patient: ${p.name}\nAge: ${p.age}\nBed: ${p.bed || '-'}\nStatus: ${p.status}\nAilment: ${p.ailment});
+    }
+
+    // KPIs update
+    function updateKPIs(){
+      kPatients.textContent = patients.filter(p=>p.status==='admitted' || p.status==='in-surgery').length;
+      const totalBeds = 220; // demo
+      const occupied = patients.filter(p=>p.status==='admitted' || p.status==='in-surgery').length;
+      const occPercent = Math.round((occupied/totalBeds)*100);
+      kOccupancy.textContent = occPercent + '%';
+      kAppointments.textContent = appointments.length;
+      kWait.textContent = '18m';
+      kAdmit.textContent = patients.filter(p=>p.admitted && p.admitted.startsWith('2025-09-10')).length;
+      kDischarge.textContent = patients.filter(p=>p.status==='discharged').length;
+    }
+
+    // appointments list
+    function renderAppointments(){
+      apptList.innerHTML = '';
+      appointments.forEach(a=>{
+        const div = document.createElement('div');
+        div.className = 'appt card';
+        div.innerHTML = <div class='avatar'>${a.name.split(' ').map(x=>x[0]).slice(0,2).join('')}</div><div style='flex:1'><div style='font-weight:700'>${a.name}</div><div style='color:var(--muted);font-size:13px'>${a.dept}</div></div><div style='text-align:right;color:var(--muted)'>${a.time}</div>;
+        apptList.appendChild(div);
+      });
+    }
+
+    // small helper chart draw functions
+    function drawPie(canvas, data){
+      const ctx = canvas.getContext('2d');
+      const w = canvas.width, h = canvas.height; ctx.clearRect(0,0,w,h);
+      const cx = w/2, cy = h/2; const r = Math.min(w,h)/3;
+      const total = data.reduce((s,i)=>s+i.value,0);
+      let a = -Math.PI/2;
+      data.forEach(d=>{
+        const angle = (d.value/total)*(Math.PI*2);
+        ctx.beginPath(); ctx.moveTo(cx,cy); ctx.arc(cx,cy,r,a,a+angle); ctx.closePath(); ctx.fillStyle = d.color; ctx.fill();
+        a += angle;
+      });
+      // legend
+      ctx.font='12px Inter'; let lx=10, ly=10; data.forEach((d,i)=>{ctx.fillStyle=d.color;ctx.fillRect(lx,ly+ i*18,12,12);ctx.fillStyle='#0f172a';ctx.fillText(d.label + ' ' + d.value, lx+18, ly+10 + i*18)});
+    }
+
+    function drawBar(canvas, labels, values){
+      const ctx = canvas.getContext('2d'); const w=canvas.width, h=canvas.height; ctx.clearRect(0,0,w,h);
+      const max = Math.max(...values); const padding=30; const gap = (w - padding*2)/values.length; ctx.fillStyle='#e6eef3';
+      values.forEach((v,i)=>{
+        const bw = gap*0.6; const x = padding + i*gap + (gap-bw)/2; const bh = (v/max)*(h-60); const y = h - bh - 20;
+        ctx.fillStyle='#60a5fa'; ctx.fillRect(x,y,bw,bh);
+        ctx.fillStyle='#0f172a'; ctx.font='12px Inter'; ctx.textAlign='center'; ctx.fillText(labels[i], x + bw/2, h - 4);
+      });
+    }
+
+    // initial charts
+    function renderCharts(){
+      const occData = [
+        {label:'Occupied', value: patients.filter(p=>p.status==='admitted' || p.status==='in-surgery').length, color:'#ef4444'},
+        {label:'Available', value: 220 - patients.filter(p=>p.status==='admitted' || p.status==='in-surgery').length, color:'#10b981'}
+      ];
+      drawPie(occCanvas, occData);
+
+      const days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+      const values = [12, 18, 9, 20, 14, 22, 16];
+      drawBar(admitCanvas, days, values);
+    }
+
+    // interactions
+    search.addEventListener('input', renderPatients);
+    filterStatus.addEventListener('change', renderPatients);
+
+    addPatientBtn.addEventListener('click', ()=>{ overlay.style.display='flex'; });
+    cancelAdd.addEventListener('click', ()=>{ overlay.style.display='none'; });
+    saveAdd.addEventListener('click', ()=>{
+      const name = document.getElementById('pName').value.trim();
+      const age = document.getElementById('pAge').value; const ailment = document.getElementById('pAilment').value.trim(); const bed = document.getElementById('pBed').value.trim();
+      if(!name) return alert('Name required');
+      const id = 'P-' + (1000 + Math.floor(Math.random()*9000));
+      patients.unshift({id,name,age,bed,admitted:new Date().toISOString().slice(0,16).replace('T',' '),status:'admitted',ailment});
+      overlay.style.display='none'; document.getElementById('pName').value=''; document.getElementById('pAge').value=''; document.getElementById('pAilment').value=''; document.getElementById('pBed').value='';
+      renderPatients(); renderCharts();
+    });
+
+    document.getElementById('refreshBtn').addEventListener('click', ()=>{ renderPatients(); renderCharts(); alert('Refreshed'); });
+
+    document.getElementById('exportBtn').addEventListener('click', ()=>{
+      const rows = [['id','name','age','bed','admitted','status','ailment']].concat(patients.map(p=>[p.id,p.name,p.age,p.bed,p.admitted,p.status,p.ailment]));
+      const csv = rows.map(r=>r.map(cell=>"${String(cell||'').replace(/"/g,'""')}").join(',')).join('\n');
+      const blob = new Blob([csv],{type:'text/csv'}); const url=URL.createObjectURL(blob);
+      const a=document.createElement('a'); a.href=url; a.download='patients.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    });
+
+    document.getElementById('bedAssignBtn').addEventListener('click', ()=>{ const p = patients.find(x=>x.status==='admitted'); if(p) alert('Assigning bed to '+p.name); else alert('No patient to assign'); });
+    document.getElementById('sendAlertBtn').addEventListener('click', ()=>{ alert('Alert sent to on-duty staff'); });
+    document.getElementById('generateReportBtn').addEventListener('click', ()=>{ alert('Daily report generated (demo)'); });
+
+    // initial render calls
+    renderPatients(); renderAppointments(); renderCharts();
+
+    // small autosave / simulated realtime update
+    setInterval(()=>{
+      // randomly discharge or admit small number to simulate live updates
+      if(Math.random()<0.3){
+        // discharge a random admitted patient
+        const adm = patients.filter(p=>p.status==='admitted'); if(adm.length>0){ const p = adm[Math.floor(Math.random()*adm.length)]; p.status = 'discharged'; }
+      }
+      if(Math.random()<0.4){
+        // admit new
+        patients.push({id:'P-'+(1000+Math.floor(Math.random()*9000)), name:['Maya','Rohan','Sana','Vikram'][Math.floor(Math.random()*4)]+' Guest', age:20+Math.floor(Math.random()*60), bed:'A-'+(10+Math.floor(Math.random()*40)), admitted:new Date().toISOString().slice(0,16).replace('T',' '), status:'admitted', ailment:'Observation'});
+      }
+      renderPatients(); renderCharts();
+    }, 8000);
+
+  </script>
+</body>
+</html>
